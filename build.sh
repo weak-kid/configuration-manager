@@ -9,6 +9,20 @@ mkdir -p "${BUILD_DIR}/server_side"
 mkdir -p "${BUILD_DIR}/client_side"
 mkdir -p "${BIN_DIR}"
 
+CONFIG_DIR="${HOME}/com.system.configurationManager"
+SERVER_CONFIG="${CONFIG_DIR}/confManagerApplication1.json"
+
+mkdir -p "${CONFIG_DIR}"
+
+if [ ! -f "${SERVER_CONFIG}" ]; then
+    cat > "${SERVER_CONFIG}" <<EOF
+{
+    "Timeout": 2000,
+    "TimeoutPhrase": "Hello from Configuration Manager!"
+}
+EOF
+fi
+
 echo "Building server_side..."
 cd "${BUILD_DIR}/server_side"
 cmake "${SRC_DIR}/server_side" -DCMAKE_BUILD_TYPE=Release
