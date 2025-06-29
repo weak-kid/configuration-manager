@@ -8,6 +8,10 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
+sdbus::ServiceName SERVICE_NAME{"com.system.configurationManager"};
+constexpr const char* OBJECT_PATH_PREFIX = "/com/system/configurationManager/Application/";
+constexpr const char* INTERFACE_NAME = "com.system.configurationManager.Application.Configuration";
+
 class ApplicationConfiguration
 {
 public:
@@ -16,7 +20,7 @@ public:
     {
         loadConfig();
 
-        sdbus::ObjectPath objectPath{"/com/system/configurationManager/Application/" + appName_};
+        sdbus::ObjectPath objectPath{OBJECT_PATH_PREFIX + appName_};
         dbusObject_ = sdbus::createObject(connection, objectPath);
 
         dbusObject_->addVTable(
@@ -30,7 +34,7 @@ public:
                 }),
                 sdbus::registerSignal("configurationChanged")
                 .withParameters<std::map<std::string, sdbus::Variant>>())
-                .forInterface("com.system.configurationManager.Application.Configuration");
+                .forInterface(INTERFACE_NAME);
 
         
     }
@@ -42,7 +46,11 @@ public:
             json configJson = json::parse(file);
             config_.clear();
             for (auto& [key, value] : configJson.items()) {
-                config_[key] = sdbus::Variant{value.get<std::string>()};
+                if (value.is_number_unsigned()) {
+                    config_[key] = sdbus::Variant{value.get<uint32_t>()};
+                } else {
+                    config_[key] = sdbus::Variant{value.get<std::string>()};
+                }
             }
         } catch (const std::exception& e) {
             throw sdbus::Error(sdbus::Error::Name{"LoadFailed"}, "Failed to load configuration: " + std::string(e.what()));
@@ -53,7 +61,13 @@ public:
         try {
             json configJson;
             for (auto& [key, variant] : config_) {
-                configJson[key] = variant.get<std::string>();
+                if (variant.containsValueOfType<std::string>()) {
+                    configJson[key] = variant.get<std::string>();
+                } else if (variant.containsValueOfType<uint32_t>()) {
+                    configJson[key] = variant.get<uint32_t>();
+                } else {
+                    continue;
+                }
             }
             std::ofstream file(configPath_);
             file << configJson.dump(4);
@@ -67,7 +81,7 @@ public:
         saveConfig();
 
         dbusObject_->emitSignal("configurationChanged")
-            .onInterface("com.system.configurationManager.Application.Configuration")
+            .onInterface(INTERFACE_NAME)
             .withArguments(config_);
     }
 
@@ -90,8 +104,7 @@ int main() {
         return 1;
     }
 
-    sdbus::ServiceName serviceName{"com.system.configurationManager"};
-    auto connection = sdbus::createBusConnection(serviceName);
+    auto connection = sdbus::createBusConnection(SERVICE_NAME);
 
     fs::path configDir = std::string(getenv("HOME")) + "/com.system.configurationManager";
     std::vector<std::unique_ptr<ApplicationConfiguration>> apps;
